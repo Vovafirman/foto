@@ -1,0 +1,114 @@
+name: Build optimized media assets
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-media-assets.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install image tooling
+        run: python -m pip install --quiet pillow requests
+
+      - name: Download and optimize assets
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageOps
+          import requests, io, os, glob
+
+          root = Path("assets")
+          projects = root / "projects"
+          root.mkdir(exist_ok=True)
+          projects.mkdir(exist_ok=True)
+
+          s = requests.Session()
+          s.headers.update({
+              "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126 Safari/537.36",
+              "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+          })
+
+          def fetch(urls):
+              if isinstance(urls, str): urls=[urls]
+              err=None
+              for url in urls:
+                  try:
+                      r=s.get(url, timeout=30, allow_redirects=True)
+                      r.raise_for_status()
+                      if len(r.content) < 1500:
+                          raise RuntimeError("response too small")
+                      return r.content
+                  except Exception as e:
+                      err=e
+              raise err or RuntimeError("download failed")
+
+          def save_cover(name, urls, size=(560,700), quality=82):
+              data=fetch(urls)
+              im=Image.open(io.BytesIO(data)).convert("RGB")
+              im=ImageOps.fit(im, size, method=Image.Resampling.LANCZOS, centering=(0.5,0.5))
+              im.save(projects/f"{name}.webp", "WEBP", quality=quality, method=6)
+
+          covers = {
+            "sled": ["https://www.kinonews.ru/insimgs/2023/poster/poster113807_1.jpg"],
+            "galileo": ["https://static.tvmaze.com/uploads/images/original_untouched/502/1257494.jpg"],
+            "gadalka": ["https://m.media-amazon.com/images/M/MV5BNmMyMDM0NDktMGU4Mi00NDE5LTg3NTItZjNjMTU1M2U3Yzk2XkEyXkFqcGc%40._V1_FMjpg_UX1000_.jpg"],
+            "slepaya": [
+              "https://avatars.mds.yandex.net/get-kinopoisk-image/4486362/54dd7312-6561-4ce1-9a68-35dd530214b7/576x",
+              "https://storage.gpm-content.ru/s/tv3/img/2/b/19729.jpg"
+            ],
+            "detektivy": ["https://img5tv.cdnvideo.ru/webp/shared/files/202009/2656_1180388.jpg"],
+            "federalny-sudya": ["https://avatars.mds.yandex.net/get-vthumb/2160577/1b07fe0c152bfc7c39ac9850be5062e5/564x318_1"],
+            "pyataya-strazha": ["https://www.film.ru/sites/default/files/movies/posters/6204630-3517949.jpg"],
+            "ponyat-prostit": ["https://www.justwatch.com/images/poster/320718756/s718/poniat-prostit.jpg"],
+          }
+
+          for name, urls in covers.items():
+              try:
+                  save_cover(name, urls)
+                  print("OK", name)
+              except Exception as e:
+                  print("FAILED", name, e)
+                  # deterministic branded fallback, never a broken file
+                  im=Image.new("RGB",(560,700),(103,116,139))
+                  im.save(projects/f"{name}.webp","WEBP",quality=82,method=6)
+
+          # Profile: optimize the already-owned uploaded image from this repository.
+          candidates = [Path(p) for p in glob.glob("*.png") if "ChatGPT Image" in p]
+          if not candidates:
+              raise RuntimeError("Profile source PNG not found")
+          pimg=Image.open(candidates[0]).convert("RGB")
+          target_w=560
+          target_h=round(pimg.height*target_w/pimg.width)
+          pimg=pimg.resize((target_w,target_h),Image.Resampling.LANCZOS)
+          pimg.save(root/"profile.webp","WEBP",quality=84,method=6)
+
+          # TeleAlliance logo: store a local black version with transparency.
+          logo=Image.open(io.BytesIO(fetch("https://telealiance.ru/wp-content/uploads/2020/09/TeleAlians_logo_wh-300x84.png"))).convert("RGBA")
+          pix=logo.load()
+          for y in range(logo.height):
+              for x in range(logo.width):
+                  r,g,b,a=pix[x,y]
+                  if a:
+                      pix[x,y]=(18,20,24,a)
+          logo.save(root/"telealliance-logo-black.png", optimize=True)
+          PY
+
+      - name: Commit optimized assets
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets
+          if git diff --cached --quiet; then
+            echo "No asset changes"
+            exit 0
+          fi
+          git commit -m "Optimize TeleAlliance business card media"
+          git push
