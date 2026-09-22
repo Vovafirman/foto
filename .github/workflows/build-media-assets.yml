@@ -58,7 +58,7 @@ jobs:
 
           covers = {
             "sled": ["https://www.kinonews.ru/insimgs/2023/poster/poster113807_1.jpg"],
-            "galileo": ["https://static.tvmaze.com/uploads/images/original_untouched/502/1257494.jpg"],
+            "galileo": ["https://cs6.pikabu.ru/post_img/big/2015/03/03/7/1425380803_357271458.jpg"],
             "gadalka": ["https://m.media-amazon.com/images/M/MV5BNmMyMDM0NDktMGU4Mi00NDE5LTg3NTItZjNjMTU1M2U3Yzk2XkEyXkFqcGc%40._V1_FMjpg_UX1000_.jpg"],
             "slepaya": [
               "https://avatars.mds.yandex.net/get-kinopoisk-image/4486362/54dd7312-6561-4ce1-9a68-35dd530214b7/576x",
